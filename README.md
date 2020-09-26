@@ -1,73 +1,39 @@
 # luaregex
 
-A regular expression engine written from scratch in Lua. No C, no LPeg,
-no `string.find` tricks: a hand-written parser and a backtracking matcher in
-about 400 lines.
+Um motor de expressões regulares escrito do zero em Lua. Sem C, sem LPeg, sem `string.find` escondido: parser feito à mão e um matcher com backtracking, em umas 400 linhas.
 
-I wrote it to understand what actually happens inside a regex engine:
-how a pattern becomes a syntax tree, how backtracking works, why lazy and
-greedy quantifiers differ, and where catastrophic patterns come from.
+Fiz porque eu usava regex há anos sem saber o que acontecia lá dentro. Depois disso, "catastrophic backtracking" deixou de ser uma frase de blog e virou uma coisa que eu vi acontecer no meu próprio código, linha por linha.
 
-## Supported syntax
-
-| Feature | Syntax |
+| O que tem | Sintaxe |
 | --- | --- |
-| Literals and escapes | `abc`, `\.`, `\n`, `\t` |
-| Any character | `.` (does not match newline) |
-| Anchors | `^`, `$`, `\b`, `\B` |
-| Classes | `[abc]`, `[a-z]`, `[^0-9]`, `\d \w \s \D \W \S` |
-| Quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}` |
-| Lazy quantifiers | `*?`, `+?`, `??`, `{n,m}?` |
-| Groups | `( )` capturing, `(?: )` non-capturing |
-| Back-references | `\1` .. `\9` |
-| Alternation | `a\|b` |
-| Flags | `"i"` case-insensitive |
-
-## API
+| literais e escapes | `abc`, `\.`, `\n`, `\t` |
+| qualquer caractere | `.` (menos quebra de linha) |
+| âncoras | `^`, `$`, `\b`, `\B` |
+| classes | `[abc]`, `[a-z]`, `[^0-9]`, `\d \w \s \D \W \S` |
+| quantificadores | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}` e as versões lazy `*?` `+?` `??` |
+| grupos | `( )` com captura, `(?: )` sem |
+| backreferences | `\1` até `\9` |
+| alternação | `a\|b` |
+| flag | `"i"` pra ignorar maiúsculas |
 
 ```lua
 local Regex = require("regex")
-
 local re = Regex.compile("(\d{4})-(\d{2})-(\d{2})")
-re:test("2020-09-22")                       --> true
-re:match("due 2020-09-22")                  --> "2020", "09", "22"
-re:find("due 2020-09-22")                   --> 5, 14, "2020", "09", "22"
-re:gsub("due 2020-09-22", "%3/%2/%1")       --> "due 22/09/2020", 1
-
-for word in Regex.gmatch("\w+", "one two three") do print(word) end
-Regex.split(",\s*", "a, b,c")              --> { "a", "b", "c" }
-Regex.compile("hello", "i"):match("HeLLo")  --> "HeLLo"
+re:test("2020-09-22")                     --> true
+re:match("due 2020-09-22")                --> "2020", "09", "22"
+re:gsub("due 2020-09-22", "%3/%2/%1")     --> "due 22/09/2020", 1
+for w in Regex.gmatch("\w+", "one two three") do print(w) end
+Regex.split(",\s*", "a, b,c")            --> { "a", "b", "c" }
 ```
 
-Every method also works as a one-shot function with the pattern as the first
-argument: `Regex.match("\d+", "abc 123")`.
+Toda função também funciona "one-shot" com o padrão como primeiro argumento (`Regex.match("\d+", "abc 123")`), e o `gsub` aceita string com `%0`..`%9`, função ou tabela, igual ao `string.gsub` nativo.
 
-`gsub` accepts a string with `%0`..`%9` references, a function receiving the
-captures, or a table indexed by the first capture, mirroring Lua's own
-`string.gsub`.
+## A ideia central
 
-## How it works
+O parser gera uma árvore (`seq`, `alt`, `rep`, `group`, `class`, ...). O matcher é em *continuation-passing style*: cada nó recebe uma função `k(proxima_posicao, capturas)` que representa "o que precisa casar depois de mim". Se um nó devolve `nil`, esse caminho falhou e quem chamou simplesmente tenta a próxima alternativa. Isso é backtracking, e cabe em umas 30 linhas quando você para de lutar contra a linguagem. Greedy tenta "mais uma iteração" antes de parar, lazy faz o contrário, e uma iteração que não consome nada encerra o loop, senão `(a*)*` roda pra sempre.
 
-1. **Parser** (`Parser:parse_alternation` and friends): a recursive-descent
-   parser produces an AST of `seq`, `alt`, `rep`, `group`, `class`, `char`,
-   `bol`, `eol`, `wordb` and `backref` nodes.
-2. **Matcher** (`m`): each node type is matched in continuation-passing
-   style. A node receives a function `k(next_index, captures)` describing
-   "what has to match after me". Returning `nil` from a node means the
-   current path failed, and the caller simply tries its next alternative,
-   which is all backtracking is.
-3. **Repetition** (`match_rep`): greedy quantifiers try one more iteration
-   before trying to stop; lazy ones do the opposite. An iteration that
-   consumes nothing ends the loop so `(a*)*` cannot spin forever.
-4. **Captures** are stored as `{start, end}` pairs and restored on
-   backtracking, so `(a|ab)(c|bcd)(d*)` reports the right groups.
+Testes: `lua test.lua`.
 
-## Tests
+---
 
-```sh
-lua test.lua
-```
-
-## License
-
-MIT
+**EN:** a regex engine in pure Lua: hand-written parser to an AST and a continuation-passing backtracking matcher. Supports classes, anchors, word boundaries, greedy and lazy quantifiers with bounds, capturing/non-capturing groups, backreferences, alternation and case-insensitive matching, with a `string.gsub`-compatible `gsub`. `lua test.lua` runs the suite. MIT.
