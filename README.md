@@ -1,5 +1,7 @@
 # luaregex
 
+> 🇺🇸 [English version below](#english)
+
 Um motor de expressões regulares escrito do zero em Lua. Sem C, sem LPeg, sem `string.find` escondido: parser feito à mão e um matcher com backtracking, em umas 400 linhas.
 
 Fiz porque eu usava regex há anos sem saber o que acontecia lá dentro. Depois disso, "catastrophic backtracking" deixou de ser uma frase de blog e virou uma coisa que eu vi acontecer no meu próprio código, linha por linha.
@@ -36,4 +38,40 @@ Testes: `lua test.lua`.
 
 ---
 
-**EN:** a regex engine in pure Lua: hand-written parser to an AST and a continuation-passing backtracking matcher. Supports classes, anchors, word boundaries, greedy and lazy quantifiers with bounds, capturing/non-capturing groups, backreferences, alternation and case-insensitive matching, with a `string.gsub`-compatible `gsub`. `lua test.lua` runs the suite. MIT.
+## English
+
+A regular expression engine written from scratch in Lua. No C, no LPeg, no hidden `string.find`: a hand-made parser and a backtracking matcher, in about 400 lines.
+
+I did it because I had been using regex for years without knowing what happened inside. After this, "catastrophic backtracking" stopped being a blog-post phrase and became something I watched happen in my own code, line by line.
+
+| What's there | Syntax |
+| --- | --- |
+| literals and escapes | `abc`, `\.`, `\n`, `\t` |
+| any character | `.` (except line break) |
+| anchors | `^`, `$`, `\b`, `\B` |
+| classes | `[abc]`, `[a-z]`, `[^0-9]`, `\d \w \s \D \W \S` |
+| quantifiers | `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}` and the lazy versions `*?` `+?` `??` |
+| groups | `( )` capturing, `(?: )` not |
+| backreferences | `\1` up to `\9` |
+| alternation | `a\|b` |
+| flag | `"i"` to ignore case |
+
+```lua
+local Regex = require("regex")
+local re = Regex.compile("(\d{4})-(\d{2})-(\d{2})")
+re:test("2020-09-22")                     --> true
+re:match("due 2020-09-22")                --> "2020", "09", "22"
+re:gsub("due 2020-09-22", "%3/%2/%1")     --> "due 22/09/2020", 1
+for w in Regex.gmatch("\w+", "one two three") do print(w) end
+Regex.split(",\s*", "a, b,c")            --> { "a", "b", "c" }
+```
+
+Every function also works "one-shot" with the pattern as the first argument (`Regex.match("\d+", "abc 123")`), and `gsub` accepts a string with `%0`..`%9`, a function or a table, same as the native `string.gsub`.
+
+## The central idea
+
+The parser produces a tree (`seq`, `alt`, `rep`, `group`, `class`, ...). The matcher is in *continuation-passing style*: each node receives a function `k(next_position, captures)` that represents "what needs to match after me". If a node returns `nil`, that path failed and the caller simply tries the next alternative. That is backtracking, and it fits in about 30 lines once you stop fighting the language. Greedy tries "one more iteration" before stopping, lazy does the opposite, and an iteration that consumes nothing ends the loop, otherwise `(a*)*` runs forever.
+
+Tests: `lua test.lua`.
+
+MIT.
